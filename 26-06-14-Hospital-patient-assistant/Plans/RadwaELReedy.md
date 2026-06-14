@@ -60,8 +60,6 @@ flowchart TD
 - You **can't remove Call** — without it, patients forget appointments (high no-show rate)
 - You **can't remove Orchestrator** — without it, agents don't talk to each other
 
-> **Minimum = 5 agents** (1 orchestrator + 4 specialists). You asked for minimum 4, so you could merge Planner + Availability into one agent, but separating them is better for accuracy and clarity.
-
 ---
 
 ## 3. Accuracy — How to Make It Reliable
