@@ -60,17 +60,17 @@ This makes the system more organized, easier to monitor, and better aligned with
 
 ## Agentic System Overview
 
-The proposed system includes the following AI agents:
+The proposed system centers on a single Orchestrator that performs triage reasoning (intent and urgency) and invokes deterministic tools, plus two essential specialized agents for complex work. Deterministic services handle identity matching and routing decisions. The Dynamic Knowledge Agent is goal-seeking and will pivot across sources until the user's goal is satisfied.
 
-| AI Agent | Business Role |
+| Component | Business Role |
 | --- | --- |
-| Intake AI Agent | Collects patient identity and the reason for contact. |
-| Triage AI Agent | Understands the request type and detects urgency. |
-| Knowledge AI Agent | Uses approved documents, business rules, CRM data, and EHR data to find relevant context. |
-| Routing AI Agent | Recommends where the case should go based on urgency, agent availability, intent, and loyalty/status. |
-| Handoff AI Agent | Prepares a clear summary for the human agent. |
+| Orchestrator (Agent Coordinator) | Receives channel-normalized interactions, performs intent and urgency evaluation, invokes deterministic tools (identification, routing), and delegates retrieval/synthesis to specialized agents. |
+| Patient Identification Tool (deterministic) | Matches channel credentials (phone, email, WhatsApp, Messenger) to CRM identity or flags new customers; returns normalized identity hints. |
+| Dynamic Knowledge Agent | Goal-seeking retrieval and reasoning across curated documents, deterministic rules, CRM, and EHR; pivots between sources and composes evidence for handoff. |
+| Routing Engine (deterministic) | Applies business routing rules, agent availability, loyalty/status tiers, and urgency to return a target queue/destination. |
+| Handoff AI Agent | Synthesizes interaction and evidence into a concise, CRM-ready handoff package for human agents. |
 
-These agents are managed by an agent coordinator, which ensures the workflow happens in the right order and that each step is logged for auditability.
+All decisions, tool calls, and handoff outputs are logged for auditability and compliance.
 
 ## User Stories
 
@@ -89,31 +89,30 @@ As an admin, I want to configure routing rules, loyalty priority, knowledge sour
 ## Proposed Patient Support Experience
 
 1. The patient contacts support by phone or chat.
-2. The Patient Assistant receives the interaction.
-3. The Intake AI Agent collects patient identity and the reason for contact.
-4. The Triage AI Agent identifies the request type and urgency.
-5. The Knowledge AI Agent gathers relevant approved information from documents, rules, CRM, and EHR systems.
-6. The Routing AI Agent determines the right priority and routing path.
-7. The Handoff AI Agent prepares a concise summary.
-8. A human agent receives the prepared case and continues the conversation.
-9. Admin users monitor performance and improve routing rules or knowledge sources.
+2. The channel gateway normalizes the interaction and forwards it to the Orchestrator.
+3. The Orchestrator invokes the `Patient Identification Tool` to match channel credentials (phone, email, WhatsApp, Messenger) to CRM identity or flag the user as a new customer.
+4. The Orchestrator evaluates intent and urgency as part of its reasoning loop.
+5. If more evidence is needed, the Orchestrator delegates retrieval to the `Dynamic Knowledge Agent`, which pursues the user's goal across curated docs, CRM, EHR, and deterministic rules—pivoting sources until the goal is satisfied or exhaustion rules apply.
+6. The Orchestrator invokes the `Routing Engine` and availability checker to compute final routing and priority (considering loyalty/status tiers and real-time agent availability).
+7. The Orchestrator delegates synthesis to the `Handoff AI Agent`, which creates a concise, evidence-backed CRM case summary.
+8. A human agent receives the prepared case in their dashboard and continues support.
+9. Admin users monitor performance metrics and update routing rules and knowledge sources via the Admin Dashboard.
 
 ```mermaid
 flowchart TD
-    P[Patient] -->|1. Contacts via Phone/Chat| Gateway[2. Channel Gateway / Agent Coordinator]
-    Gateway --> Intake[3. Intake AI Agent: Collects Identity & Reason]
-    Intake --> Triage[4. Triage AI Agent: Identifies Request Type & Urgency]
-    Triage --> Knowledge[5. Knowledge AI Agent: Gathers CRM, EHR, Rules & Docs]
-    
-    Knowledge -.->|Tools| CRM_EHR[(CRM & EHR Data)]
-    Knowledge -.->|Tools| HybridKB[Hybrid Knowledge Base: Not RAG Alone]
-    
-    Knowledge --> Routing[6. Routing AI Agent: Determines Priority]
-    Routing --> Handoff[7. Handoff AI Agent: Prepares Concise Summary]
-    Handoff --> HumanPool[8. Human Agent Pool: Minimum 4 Agents]
-    
-    Admin[9. Admin Users] -.->|Monitor Wait Time & Availability Metrics| Gateway
-    Admin -.->|Improve Routing Rules & KB| HybridKB
+    P[Patient] -->|1. Contacts via Phone/Chat| Gateway[Channel Gateway]
+    Gateway --> Orch[Orchestrator]
+
+    Orch --> |Calls| PID[Patient Identification Tool]
+    Orch --> |Evaluates| Intent[Orchestrator: Intent & Urgency]
+    Orch --> |Delegates| DynK[Dynamic Knowledge Agent]
+    DynK -.->|Uses| Tools[Tool Layer: Docs / CRM / EHR / Rules]
+    Orch --> |Calls| Routing[Routing Engine]
+    Orch --> |Delegates| Handoff[Handoff AI Agent]
+    Handoff --> HumanPool[Human Agent Pool: Minimum 4 Agents]
+
+    Admin[Admin Users] -.->|Monitor & Update| Orch
+    Admin -.->|Manage Rules & KB| Tools
 ```
 
 ## Business Benefits
@@ -199,7 +198,9 @@ Confirm patient support workflows, user roles, routing rules, loyalty/status log
 
 ### Phase 2: Agentic AI Foundation
 
-Build the agent coordinator and the specialized AI agents for intake, triage, knowledge, routing, and handoff.
+- Build the Orchestrator (agent coordinator) and implement triage reasoning within it (intent and urgency evaluation).
+- Implement the `Dynamic Knowledge Agent` and `Handoff AI Agent` skeletons.
+- Implement deterministic tools/services: `Patient Identification Tool`, `Routing Engine`, `Urgency Classifier`, and `Availability Checker`.
 
 ### Phase 3: CRM and EHR Connection
 

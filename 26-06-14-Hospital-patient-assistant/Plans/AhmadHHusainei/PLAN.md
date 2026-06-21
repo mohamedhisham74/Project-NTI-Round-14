@@ -8,7 +8,7 @@ The current process also creates inconsistent call handling. Some calls take lon
 
 The business needs an agentic AI Patient Assistant for phone and chat that reduces wait time, improves availability, prepares human agents with relevant context, and supports tiered routing based on urgency, agent availability, intent, and loyalty/status priority.
 
-The target outcome is a multi-agent AI triage and handoff system where specialized AI agents collect patient context, apply routing rules, retrieve relevant CRM/EHR data, use a hybrid knowledge base that is not RAG alone, and hand off prepared cases to human agents.
+The target outcome is a multi-agent AI orchestrated triage and handoff system where specialized AI agents collect patient context, apply routing rules, retrieve relevant CRM/EHR data, use a hybrid knowledge base that is not RAG alone, and hand off prepared cases to human agents.
 
 ## 2. User Stories
 
@@ -22,7 +22,7 @@ The target outcome is a multi-agent AI triage and handoff system where specializ
 
 ### Product Goal
 
-Reduce patient wait time and improve agent availability through an omnichannel agentic AI assistant that coordinates specialized AI agents for automated triage, patient-context retrieval, routing, and high-quality human handoff preparation.
+Reduce patient wait time and improve agent availability through an omnichannel agentic AI assistant that coordinates specialized AI agents for orchestrated triage, patient-context retrieval, routing, and high-quality human handoff preparation.
 
 ### Target Users
 
@@ -32,17 +32,17 @@ Reduce patient wait time and improve agent availability through an omnichannel a
 
 ### Core Capabilities
 
-- Accept patient interactions from phone and chat.
-- Orchestrate specialized AI agents through an agent coordinator.
-- Use an intake AI agent to manage patient identity capture and request discovery.
-- Use a knowledge AI agent to combine curated documents, deterministic rules, and CRM/EHR tool calls.
-- Use a routing AI agent to evaluate urgency, availability, intent, and loyalty/status tier.
-- Use a handoff AI agent to prepare structured summaries for human agents.
-- Capture patient identity and request reason.
-- Classify patient intent and urgency.
-- Retrieve relevant patient context from CRM and EHR systems.
-- Use a hybrid knowledge base made of curated documents, deterministic business rules, and structured CRM/EHR API lookups.
-- Apply routing based on urgency, availability, intent, and loyalty/status tier.
+- Accept patient interactions from phone or chat.
+- Orchestrate specialized AI agents and deterministic tools through a central Orchestrator.
+- Use a `Patient Identification Tool` to match incoming channel credentials (phone, email, WhatsApp, Messenger) to CRM identity or mark as a new customer.
+- Use a `Dynamic Knowledge Agent` that actively pursues the user's goal across multiple data sources (curated docs, CRM, EHR, deterministic rules) and pivots when a chosen source lacks the required evidence.
+- Implement deterministic tools for urgency/priority classification, routing decisions, and agent availability checks; these tools are invoked by the Orchestrator rather than being autonomous agents.
+- Use a `Handoff AI Agent` to synthesize and package interaction context into a structured CRM case summary.
+- Accept patient identity through channel-native credentials or detect the absence of CRM traces for new customers.
+- Perform intent and urgency evaluation as part of the Orchestrator's reasoning loop (no separate triage agent required).
+- Retrieve and synthesize relevant patient context dynamically from CRM and EHR systems.
+- Use a hybrid knowledge base made of curated documents, deterministic business rules, and structured CRM/EHR API lookups—with intelligent source selection by the Dynamic Knowledge Agent.
+- Apply routing based on urgency, availability, intent, and loyalty/status tier using a deterministic rules engine invoked by the Orchestrator.
 - Prepare a human handoff package with patient identity, intent, priority, channel, summary, and relevant CRM/EHR history.
 - Provide operational monitoring for wait time and availability.
 
@@ -56,41 +56,54 @@ Reduce patient wait time and improve agent availability through an omnichannel a
 ### Constraints
 
 - The operational human agent pool must include a minimum of 4 agents.
-- The agentic AI design must include at least 4 specialized AI agent roles: intake, knowledge, routing, and handoff.
+- The agentic AI design must include exactly 3 specialized AI agent roles: Orchestrator (which performs triage reasoning), Dynamic Knowledge Agent, and Handoff Agent. Deterministic tools cover identification, routing, and simple classification.
 - Patient data must be treated as protected health information under a HIPAA-like privacy and security posture.
 - The knowledge base must not rely on RAG alone.
 - Version 1 channels are phone and chat.
-- Version 1 automation is triage and handoff, not full self-service.
+- Version 1 automation covers orchestrated triage (by the Orchestrator), dynamic knowledge retrieval, and handoff preparation (not full self-service).
 
 ## 4. Functional Requirements Document (FRD)
 
-### Agentic AI Requirements
+### Agentic AI Requirements (Inputs, Outputs, and Tools)
 
-- The system must include an agent coordinator that manages the flow between specialized AI agents.
-- The system must include an intake AI agent responsible for patient identity capture, request discovery, and channel-normalized intake.
-- The system must include a triage AI agent responsible for intent classification and urgency detection.
-- The system must include a knowledge AI agent responsible for selecting between curated documents, deterministic rules, CRM APIs, and EHR APIs.
-- The system must include a routing AI agent responsible for routing recommendations based on urgency, availability, intent, and loyalty/status tier.
-- The system must include a handoff AI agent responsible for creating the human-agent handoff package.
+- **Agent Coordinator (Orchestrator)**
+  - *Role*: Central Orchestrator that maintains shared interaction state, performs triage reasoning (intent and urgency) as part of its decision loop, invokes deterministic tools, and delegates complex retrieval/synthesis work to the Dynamic Knowledge Agent and Handoff Agent.
+  - *Inputs*: Channel-normalized patient messages and channel metadata (phone number, platform id).
+  - *Outputs*: Routing decision, delegation commands for retrieval/synthesis, and final handoff payload.
+  - *Tools*: `Patient Identification Tool`, `Routing Rules Engine`, `Urgency/Priority Classifier`, and subagent invocation primitives.
+- **Patient Identification Tool (Deterministic Tool)**
+  - *Role*: Deterministic identity matching across channels.
+  - *Inputs*: Channel credential (phone, email, platform id), interaction metadata.
+  - *Outputs*: Matched CRM identity or `new_customer` flag with normalized identity hints.
+  - *Tools/Integrations*: CRM lookup, hashed PII matching, anti-fraud signals.
+- **Dynamic Knowledge Agent (Essential Subagent)**
+  - *Role*: Goal-seeking retrieval and reasoning agent that pursues the user's information goal across multiple sources, pivots when necessary, and composes context for handoff.
+  - *Inputs*: Orchestrator-provided intent/goal, matched identity (when available), and interaction transcript.
+  - *Outputs*: Synthesized context and evidence, prioritized list of relevant records and documents.
+  - *Tools/Integrations*: Curated Document Search, CRM API, EHR API, Deterministic Rules Engine, and source-probing adapters.
+- **Handoff AI Agent (Essential Subagent)**
+  - *Role*: Synthesize collected evidence and interaction state into a concise, actionable CRM case/package suitable for human agents.
+  - *Inputs*: Aggregated state from the Orchestrator and Dynamic Knowledge Agent.
+  - *Outputs*: Standardized handoff package and optional CRM ticket creation.
+  - *Tools/Integrations*: Context Formatter/Summarizer, CRM Case/Ticket Creator.
 - The system must log agent decisions, tool calls, and handoff outputs for auditability.
 
-### Intake Requirements
+### Intake Requirements (Identification)
 
-- The system must accept patient requests from phone and chat.
-- The system must collect patient identity.
-- The system must collect the patient request reason.
-- The system must classify request intent.
-- The system must detect urgency for routing and escalation.
+- The system must accept patient requests from phone or chat.
+- The system must attempt deterministic patient identification using available channel credentials (phone, email, WhatsApp, Messenger) via the `Patient Identification Tool` and mark customers with no CRM trace as `new`.
+- The system must capture the patient's request reason in normalized form.
+- The system must surface intent and urgency as outputs of the Orchestrator's reasoning loop.
 
 ### Knowledge Requirements
 
 - The system must retrieve approved policy and FAQ content from curated documents.
-- The system must apply deterministic business and routing rules.
+- The system must apply deterministic business and routing rules when required.
 - The system must query CRM APIs for structured patient and case context.
 - The system must query EHR APIs for relevant patient history.
 - The system must combine documents, rules, and structured APIs as a hybrid knowledge base.
 - The system must not use RAG as the only knowledge mechanism.
-- The knowledge AI agent must choose the appropriate knowledge source based on the task instead of treating every request as a retrieval-only question.
+- The Dynamic Knowledge Agent must be goal-seeking: it should evaluate which source is most likely to contain required evidence, attempt retrieval, and pivot to alternate sources until the goal is satisfied or exhaustion rules trigger.
 
 ### Routing Requirements
 
@@ -101,14 +114,14 @@ Reduce patient wait time and improve agent availability through an omnichannel a
 ### Handoff Requirements
 
 - The system must generate a concise handoff package before agent transfer.
-- The handoff AI agent must generate the handoff package from intake, triage, knowledge, routing, and CRM/EHR context.
+- The Handoff AI Agent must generate the handoff package using aggregated state (identity, orchestrator-determined intent/urgency, dynamic knowledge evidence, routing decision, and CRM/EHR context).
 - The handoff package must include:
   - Patient identity.
-  - Request intent.
-  - Priority.
+  - Request intent/goal.
+  - Priority/urgency.
   - Channel.
   - Interaction summary.
-  - Relevant CRM/EHR history.
+  - Relevant CRM/EHR history and cited evidence.
 - The human agent must be able to continue support using the prepared context.
 
 ### Admin Requirements
@@ -127,14 +140,14 @@ Reduce patient wait time and improve agent availability through an omnichannel a
 ## 5. User Workflow
 
 1. A patient starts an interaction through phone or chat.
-2. The channel gateway normalizes the interaction and sends it to the agent coordinator.
-3. The intake AI agent collects patient identity and request reason.
-4. The triage AI agent classifies request intent and urgency.
-5. The knowledge AI agent retrieves relevant curated knowledge and CRM/EHR context through approved tools.
-6. The routing AI agent applies routing rules, agent availability, urgency, and loyalty/status priority.
-7. The handoff AI agent prepares a structured handoff summary.
-8. A human agent receives the prepared case and continues support.
-9. An admin monitors wait time, availability metrics, agent behavior, and knowledge-source performance, then adjusts routing rules or knowledge sources as needed.
+2. The channel gateway normalizes the interaction and sends it to the central Agent Coordinator (Orchestrator).
+3. The Orchestrator invokes the `Patient Identification Tool` to match channel credentials (phone, email, platform id) to CRM identity or flag the user as new.
+4. The Orchestrator performs intent and urgency evaluation natively as part of its reasoning loop.
+5. The Orchestrator delegates retrieval and evidence-seeking to the *Dynamic Knowledge Agent*, which pursues the user's goal across curated docs, CRM, EHR, and deterministic rules—pivoting sources as necessary.
+6. The Orchestrator invokes the deterministic *Routing Rules Engine* and *Availability Checker* to assess agent availability, urgency, intent, and calculate loyalty/status priority into a routing decision.
+7. The Orchestrator delegates to the *Handoff AI Agent* to prepare a structured CRM case summary from the shared interaction state.
+8. A human agent receives the prepared case in their dashboard and continues support.
+9. An admin (authenticated via IAM/RBAC) monitors metrics and behaves rules through the Admin Dashboard.
 
 ## 6. Project Structure
 
@@ -152,7 +165,7 @@ patient-assistant/
 │   │   ├── models/
 │   │   ├── orchestration/
 │   │   └── services/
-│   │       ├── triage/
+│   │       ├── identification/
 │   │       ├── routing/
 │   │       ├── knowledge/
 │   │       └── handoff/
@@ -165,9 +178,9 @@ patient-assistant/
 - `frontend/`: Patient chat UI, agent dashboard, and admin views.
 - `backend/`: Python API services.
 - `backend/app/api/`: REST and WebSocket endpoints.
-- `backend/app/agents/`: Specialized AI agents for intake, triage, knowledge, routing, and handoff.
+-- `backend/app/agents/`: Specialized AI agents for the Orchestrator, Dynamic Knowledge Agent, and Handoff Agent (deterministic tools live in `services`).
 - `backend/app/orchestration/`: Agent coordinator, agent state management, guardrails, and tool-call flow.
-- `backend/app/services/`: Triage, routing, knowledge, and handoff logic.
+-- `backend/app/services/`: Identification, routing, knowledge, and handoff logic. (Triage reasoning lives in the Orchestrator.)
 - `backend/app/integrations/`: CRM, EHR, telephony, and chat provider integrations.
 - `backend/app/models/`: Domain models and schemas.
 - `backend/tests/`: Backend test coverage.
@@ -175,63 +188,75 @@ patient-assistant/
 
 ## 7. Project Architecture
 
-The system uses phone and chat channels connected to a channel gateway. The Python backend API hosts an agentic AI orchestration layer that coordinates specialized AI agents for intake, triage, knowledge access, routing, handoff preparation, security, and audit logging.
+The system uses phone and chat channels connected to a channel gateway. The Python backend API hosts an agentic AI orchestration layer (the Orchestrator) that performs triage reasoning, invokes deterministic tools, and delegates complex retrieval and synthesis to specialized agents.
 
 Core architecture components:
 
 - Patient channels: phone and chat.
 - Channel gateway: telephony and chat adapters.
+- IAM / RBAC Middleware: Access control layer sitting in front of internal admin/agent access to secure APIs.
 - API backend: Python service layer.
-- Agent coordinator: manages the multi-agent workflow and shared interaction state.
-- Intake AI agent: patient identity and request discovery.
-- Triage AI agent: request intent and urgency.
-- Knowledge AI agent: curated documents, deterministic rules, and structured CRM/EHR API lookups.
-- Routing AI agent: agent availability, urgency, intent, and loyalty/status priority.
-- Handoff AI agent: summary generation and case packaging.
-- Tool layer: controlled access to CRM, EHR, rules, curated documents, metrics, and audit logging.
-- Agent dashboard: prepared patient case view.
-- Admin dashboard: routing, loyalty tier, knowledge source, and metric management.
-- Audit/security layer: access control and audit logging.
+- Agent coordinator (Orchestrator): manages the multi-agent workflow, holds shared interaction state, performs intent/urgency triage, invokes deterministic tools, and delegates to essential agents (Dynamic Knowledge Agent and Handoff Agent).
+- Patient Identification Tool: Deterministic service to match channel credentials to CRM identity or flag new customers.
+- Dynamic Knowledge Agent: Essential subagent reasoning over curated documents, deterministic rules, and structured CRM/EHR API lookups with goal-seeking and pivoting behavior (Tools: Document Search, CRM API, EHR API).
+- Routing Engine: Deterministic Orchestrator-invoked engine for agent availability, urgency, intent, and loyalty/status priority logic.
+- Handoff AI agent: Essential subagent generating summaries and packaging CRM cases (Tools: Handoff Formatter, CRM creator).
+- Tool layer: controlled, verifiable boundary abstracting CRM, EHR, classification, routing, rules, etc.
+- Dashboards: Agent dashboard (patient case view) and Admin dashboard (metrics, rules), protected by IAM.
+- Audit layer: tracks all access, orchestration states, and tool invocations.
 
 ## 8. Mermaid Architecture Diagram
 
 ```mermaid
 flowchart TD
+    %% Patient Entry
     Patient[Patient] --> Phone[Phone Channel]
     Patient --> Chat[Chat Channel]
-
     Phone --> Gateway[Channel Gateway]
     Chat --> Gateway
 
-    Gateway --> API[Python Backend API]
-    API --> Coordinator[Agent Coordinator]
+    %% Internal Auth Boundary
+    AdminDashboard[Admin Dashboard] --> IAM[IAM / RBAC Middleware]
+    AgentDashboard[Agent Dashboard] --> IAM
+    IAM --> API[Python Backend API]
 
-    Coordinator --> IntakeAgent[Intake AI Agent]
-    IntakeAgent --> TriageAgent[Triage AI Agent]
-    TriageAgent --> KnowledgeAgent[Knowledge AI Agent]
-    TriageAgent --> RoutingAgent[Routing AI Agent]
+    Gateway --> API
 
-    KnowledgeAgent --> ToolLayer[Approved Tool Layer]
+    %% Orchestrator & Hub-and-Spoke Subagents
+    API --> Coordinator[Agent Coordinator / Orchestrator]
+
+    %% Orchestrator Tools
+    Coordinator --> |Calls Tool| PatientIDTool[Patient Identification Tool]
+    Coordinator --> |Calls Tool| RoutingTool[Deterministic Routing Tool]
+
+    %% Essential Subagents
+    Coordinator <-->|Delegates| DynamicKnowledge[Dynamic Knowledge Agent]
+    Coordinator <-->|Delegates| HandoffAgent[Handoff AI Agent]
+
+    %% Tools Layer
+    DynamicKnowledge -.-> ToolLayer[Approved Tool Layer]
+    RoutingTool -.-> ToolLayer
+
     ToolLayer --> Docs[Curated Docs and FAQs]
-    ToolLayer --> Rules[Deterministic Rules]
+    ToolLayer --> Rules[Deterministic Rules / Availability]
     ToolLayer --> CRM[CRM API]
     ToolLayer --> EHR[EHR API]
 
-    RoutingAgent --> AgentPool[Human Agent Pool: Minimum 4 Agents]
-    RoutingAgent --> HandoffAgent[Handoff AI Agent]
+    %% Handoff & Routing
+    HandoffAgent --> Case[(Handoff Package for CRM)]
+    RoutingTool --> AgentPool[Human Agent Pool: Min 4 Agents]
+    Case -.-> AgentPool
 
-    HandoffAgent --> AgentDashboard[Agent Dashboard]
-    API --> AdminDashboard[Admin Dashboard]
+    AgentPool --> AgentDashboard
 
     AdminDashboard --> Rules
-    AdminDashboard --> KnowledgeAgent
     AdminDashboard --> Metrics[Wait Time and Availability Metrics]
 
-    API --> Security[Role-Based Access Control]
+    %% Auditing
     API --> Audit[Audit Logs]
     Coordinator --> Audit
     ToolLayer --> Audit
-    Security --> Audit
+    IAM --> Audit
 ```
 
 ## 9. Proposed Development Workflow
@@ -239,7 +264,7 @@ flowchart TD
 ### Phase 1: Requirements Finalization and Domain Modeling
 
 - Finalize patient, agent, admin, interaction, routing, priority, and handoff domain models.
-- Define agent responsibilities for intake, triage, knowledge, routing, and handoff.
+- Define agent and tool responsibilities for the Orchestrator, Patient Identification Tool, Dynamic Knowledge Agent, Routing Engine, and Handoff Agent.
 - Define shared agent state, tool permissions, and required audit events.
 - Confirm CRM and EHR data required for handoff context.
 - Define wait time, unanswered contact, and handoff completeness metrics.
@@ -248,9 +273,10 @@ flowchart TD
 
 - Build the Python API foundation.
 - Implement domain schemas and service boundaries.
-- Implement the agent coordinator.
-- Implement intake, triage, knowledge, routing, and handoff AI agent skeletons.
-- Implement deterministic services used by the agents for validation, routing, and handoff formatting.
+- Implement the agent coordinator (Orchestrator).
+- Implement skeletons for Dynamic Knowledge Agent and Handoff Agent.
+- Implement deterministic services and tools: Patient Identification, Routing Engine, Urgency Classifier, and Availability Checker.
+- Implement deterministic services used for validation and handoff formatting.
 
 ### Phase 3: CRM/EHR Integration
 
@@ -263,8 +289,8 @@ flowchart TD
 
 - Connect phone channel through a telephony adapter.
 - Connect chat channel through a chat adapter.
-- Normalize phone and chat interactions into the same intake workflow.
-- Route normalized interactions into the agent coordinator.
+- Normalize phone and chat interactions into the same identification workflow.
+- Route normalized interactions into the Orchestrator.
 
 ### Phase 5: Agent and Admin Dashboards
 
@@ -280,7 +306,7 @@ flowchart TD
 
 ### Phase 7: Testing, Pilot Release, and Iteration
 
-- Test intake, triage, routing, knowledge retrieval, handoff, agent orchestration, and admin workflows.
+- Test identification, orchestrator triage (intent/urgency), routing, knowledge retrieval, handoff, agent orchestration, and admin workflows.
 - Evaluate AI agent outputs for intent accuracy, urgency classification, routing correctness, and handoff completeness.
 - Run a pilot release with phone and chat channels.
 - Review wait time, unanswered contact, handoff completeness, and agent handling metrics.
