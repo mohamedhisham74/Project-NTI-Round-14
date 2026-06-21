@@ -15,8 +15,8 @@
 | **SQL Database** | PostgreSQL | Patient records, doctor schedules, appointment slots |
 | **ORM** | SQLAlchemy | Database access layer for all SQL operations |
 | **Communication Platform** | Twilio | Voice calls, SMS, WhatsApp messaging |
-| **Speech-to-Text** | Google Cloud Speech-to-Text | Transcribing voice calls into text |
-| **Text-to-Speech** | Google Cloud Text-to-Speech | Converting agent responses to voice |
+| **Speech-to-Text** | Whisper (via Groq API) | Transcribing voice calls into text |
+| **Text-to-Speech** | ElevenLabs | Converting agent responses to voice |
 | **Document Parsing** | PyMuPDF (PDFs) + python-docx (Word) | Extracting text from knowledge base documents |
 | **Audit Logging** | PostgreSQL (separate schema) + Python `logging` | Persisting all agent actions and events |
 | **API Layer** | FastAPI | Exposing the system as an API for channel integrations |
@@ -30,14 +30,14 @@
 | Setting | Value |
 |---|---|
 | **Provider** | Google Gemini via Vertex AI |
-| **Primary Model** | `gemini-2.0-flash` (fast responses, cost-efficient for most agents) |
+| **Primary Model** | `gemini-2.5-flash` (fast responses, cost-efficient for most agents) |
 | **Complex Reasoning Model** | `gemini-2.0-pro` (Orchestrator + Emergency agent for critical decisions) |
 | **Embedding Model** | `text-embedding-004` |
 | **Temperature** | `0.2` — low, for consistent and factual responses |
 | **Max Output Tokens** | `1024` per agent turn |
 | **Streaming** | Enabled — for real-time chat and voice responsiveness |
 
-> **Reasoning:** `gemini-2.0-flash` is used for most agents to minimize latency and cost. The Orchestrator and Loyalty & Emergency Agent use `gemini-2.0-pro` because their decisions (routing, emergency dispatch) require higher accuracy and reasoning depth.
+> **Reasoning:** `gemini-2.5-flash` is used for most agents to minimize latency and cost. The Orchestrator and Loyalty & Emergency Agent use `gemini-2.0-pro` because their decisions (routing, emergency dispatch) require higher accuracy and reasoning depth.
 
 ---
 
@@ -111,7 +111,7 @@ START
 
 ### 4.2 📅 Scheduling Agent
 
-**Model:** `gemini-2.0-flash`
+**Model:** `gemini-2.5-flash`
 **Role in Graph:** Specialist node — handles all appointment-related queries
 
 **System Prompt Responsibilities:**
@@ -138,7 +138,7 @@ START
 
 ### 4.3 📚 Services & Knowledge Agent
 
-**Model:** `gemini-2.0-flash`
+**Model:** `gemini-2.5-flash`
 **Role in Graph:** Specialist node — answers hospital knowledge base queries
 
 **System Prompt Responsibilities:**
@@ -162,7 +162,7 @@ START
 
 ### 4.4 🗂️ Patient Records Agent
 
-**Model:** `gemini-2.0-flash`
+**Model:** `gemini-2.5-flash`
 **Role in Graph:** Specialist node — manages all patient data operations
 
 **System Prompt Responsibilities:**
@@ -398,7 +398,7 @@ Results are then passed through a **reranker** (`cross-encoder/ms-marco-MiniLM-L
 |---|---|---|
 | **SMS** | Twilio Programmable SMS | Inbound webhook → FastAPI → LangGraph → Twilio reply |
 | **WhatsApp** | Twilio WhatsApp Business API | Same as SMS flow via WhatsApp sandbox / approved number |
-| **Voice** | Twilio Programmable Voice | Call → STT (Google) → LangGraph → TTS (Google) → Twilio audio stream |
+| **Voice** | Twilio Programmable Voice | Call → STT (Whisper / Groq) → LangGraph → TTS (ElevenLabs) → Twilio audio stream |
 
 ### Voice Call Flow (Detailed)
 
@@ -406,7 +406,7 @@ Results are then passed through a **reranker** (`cross-encoder/ms-marco-MiniLM-L
 Patient calls hospital number (Twilio)
         │
         ▼
-Twilio streams audio → Google Cloud Speech-to-Text
+Twilio streams audio → Whisper (Groq API)
         │
         ▼
 Transcribed text → FastAPI webhook
@@ -415,7 +415,7 @@ Transcribed text → FastAPI webhook
 LangGraph processes text through agent graph
         │
         ▼
-Agent text response → Google Cloud Text-to-Speech
+Agent text response → ElevenLabs Text-to-Speech
         │
         ▼
 Audio streamed back to patient via Twilio
@@ -501,7 +501,7 @@ Every agent action is logged. The audit log is **append-only** and stored in a d
 | **LLM prompt injection** | Input sanitization before passing to LLM; system prompt hardening |
 | **Ambulance dispatch authorization** | Double-confirmation pattern — patient confirms + action logged before dispatch |
 | **Audit log integrity** | Audit schema is write-only for application; read access restricted to compliance role |
-| **Environment secrets** | All API keys (Gemini, Twilio, DB) stored in environment variables / secrets manager |
+| **Environment secrets** | All API keys (Gemini, Groq, ElevenLabs, Twilio, DB) stored in environment variables / secrets manager |
 
 ---
 
@@ -510,7 +510,7 @@ Every agent action is logged. The audit log is **append-only** and stored in a d
 | Decision | Choice | Rationale |
 |---|---|---|
 | Orchestration | LangGraph | Native stateful graph; eliminates need for external session memory |
-| LLM | Google Gemini via Vertex AI | Consistent ecosystem with Google embeddings and STT/TTS |
+| LLM | Google Gemini via Vertex AI | Consistent ecosystem with Google embeddings; Whisper (Groq) for STT and ElevenLabs for TTS |
 | Two Gemini models | Flash (speed) + Pro (reasoning) | Optimizes cost vs. accuracy per agent criticality |
 | Vector Store | ChromaDB | Lightweight, easy to self-host; can migrate to Vertex AI Vector Search for cloud |
 | Retrieval | Hybrid (semantic + BM25 + rerank) | Best accuracy for structured hospital documents |
